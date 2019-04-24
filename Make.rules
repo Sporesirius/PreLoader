@@ -1,0 +1,75 @@
+ARCH	 = $(shell uname -m | sed 's/i.86/ia32/;s/arm.*/arm/')
+ifeq ($(ARCH),ia32)
+ARCH3264 = -m32
+else ifeq ($(ARCH),x86_64)
+ARCH3264 = -DX86_64
+else ifeq ($(ARCH),aarch64)
+ARCH3264 = -DAARCH64
+else ifeq ($(ARCH),arm)
+ARCH3264 = -DARM
+else
+$(error unknown architecture $(ARCH))
+endif
+INCDIR	   = -I$(TOPDIR)include/ -I/usr/include/efi -I/usr/include/efi/$(ARCH) -I/usr/include/efi/protocol
+CPPFLAGS   = -DCONFIG_$(ARCH)
+CFLAGS	   = -O2 -g $(ARCH3264) -fpic -Wall -fshort-wchar -fno-strict-aliasing -fno-merge-constants -fno-stack-protector -ffreestanding -fno-stack-check
+LDFLAGS	   = -nostdlib
+CRTOBJ		= crt0-efi-$(ARCH).o
+CRTPATHS	= /lib /lib64 /lib/efi /lib64/efi /usr/lib /usr/lib64 /usr/lib32 /usr/lib/efi /usr/lib64/efi /usr/lib/gnuefi /usr/lib64/gnuefi
+CRTPATH		= $(shell for f in $(CRTPATHS); do if [ -e $$f/$(CRTOBJ) ]; then echo $$f; break; fi; done)
+CRTOBJS		= $(CRTPATH)/$(CRTOBJ)
+# there's a bug in the gnu tools ... the .reloc section has to be
+# aligned otherwise the file alignment gets screwed up
+LDSCRIPT	= elf_$(ARCH)_efi.lds
+LDFLAGS		+= -shared -Bsymbolic $(CRTOBJS) -L $(CRTPATH) -L /usr/lib -L /usr/lib64 -L /usr/lib32 -T $(LDSCRIPT)
+LOADLIBES	= -lefi -lgnuefi $(shell $(CC) $(ARCH3264) -print-libgcc-file-name)
+FORMAT		= --target=efi-app-$(ARCH)
+OBJCOPY		= objcopy
+MYGUID		= 11111111-2222-3333-4444-123456789abc
+INSTALL		= install
+BINDIR		= $(DESTDIR)/usr/bin
+MANDIR		= $(DESTDIR)/usr/share/man/man1
+EFIDIR		= $(DESTDIR)/usr/share/efitools/efi
+DOCDIR		= $(DESTDIR)/usr/share/efitools
+
+# globally use EFI calling conventions (requires gcc >= 4.7)
+CFLAGS += -DGNU_EFI_USE_MS_ABI
+
+ifeq ($(ARCH),x86_64)
+  CFLAGS += -DEFI_FUNCTION_WRAPPER -mno-red-zone
+endif
+
+ifeq ($(ARCH),ia32)
+  CFLAGS += -mno-red-zone
+endif
+
+ifeq ($(ARCH),arm)
+  LDFLAGS += --defsym=EFI_SUBSYSTEM=0x0a
+  FORMAT = -O binary
+endif
+
+ifeq ($(ARCH),aarch64)
+  LDFLAGS += --defsym=EFI_SUBSYSTEM=0x0a
+  FORMAT = -O binary
+endif
+
+%.efi: %.so
+	$(OBJCOPY) -j .text -j .sdata -j .data -j .dynamic -j .dynsym \
+		   -j .rel -j .rela -j .rel.* -j .rela.* -j .rel* -j .rela* \
+		   -j .reloc $(FORMAT) $*.so $@
+%.so: %.o
+	$(LD) $(LDFLAGS) $^ -o $@ $(LOADLIBES)
+	# check we have no undefined symbols
+	nm -D $@ | grep ' U ' && exit 1 || exit 0
+
+%.o: %.c
+	$(CC) $(INCDIR) $(CFLAGS) $(CPPFLAGS) -c $< -o $@
+
+%.efi.o: %.c
+	$(CC) $(INCDIR) $(CFLAGS) $(CPPFLAGS) -fno-toplevel-reorder -DBUILD_EFI -c $< -o $@
+
+%.efi.s: %.c
+	$(CC) -S $(INCDIR) $(CFLAGS) $(CPPFLAGS) -fno-toplevel-reorder -DBUILD_EFI -c $< -o $@
+
+%.a:
+	ar rcv $@ $^
