@@ -20,6 +20,7 @@ PreLoader.so: lib/lib-efi.a
 clean:
 	rm -f PK.* KEK.* DB.* *.o *.so
 	rm -f noPK.*
+	rm -f *.efi
 	$(MAKE) -C lib clean
 
 FORCE:
