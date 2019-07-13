@@ -15,13 +15,13 @@
 #include <execute.h>
 
 #ifdef AARCH64
-CHAR16* loader = L"yams_grubaa64.efi";
+CHAR16* loader = L"YAMS_GRUBAA64.EFI";
 #elif ARM
-CHAR16* loader = L"yams_grubarm.efi";
+CHAR16* loader = L"YAMS_GRUBARM.EFI";
 #elif X86_64
-CHAR16* loader = L"yams_grubx64.efi";
+CHAR16* loader = L"YAMS_GRUBX64.EFI";
 #else
-CHAR16* loader = L"yams_grubia32.efi";
+CHAR16* loader = L"YAMS_GRUBIA32.EFI";
 #endif
 
 EFI_STATUS
